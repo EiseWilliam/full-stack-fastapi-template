@@ -1,3 +1,4 @@
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,9 +18,9 @@ from app.models import (
     UpdatePassword,
     User,
     UserCreate,
-    UserCreateOpen,
-    UserOut,
-    UsersOut,
+    UserPublic,
+    UserRegister,
+    UsersPublic,
     UserUpdate,
     UserUpdateMe,
 )
@@ -29,7 +30,9 @@ router = APIRouter()
 
 
 @router.get(
-    "/", dependencies=[Depends(get_current_active_superuser)], response_model=UsersOut
+    "/",
+    dependencies=[Depends(get_current_active_superuser)],
+    response_model=UsersPublic,
 )
 def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
     """
@@ -42,11 +45,11 @@ def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
     statement = select(User).offset(skip).limit(limit)
     users = session.exec(statement).all()
 
-    return UsersOut(data=users, count=count)
+    return UsersPublic(data=users, count=count)
 
 
 @router.post(
-    "/", dependencies=[Depends(get_current_active_superuser)], response_model=UserOut
+    "/", dependencies=[Depends(get_current_active_superuser)], response_model=UserPublic
 )
 def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
     """
@@ -72,7 +75,7 @@ def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
     return user
 
 
-@router.patch("/me", response_model=UserOut)
+@router.patch("/me", response_model=UserPublic)
 def update_user_me(
     *, session: SessionDep, user_in: UserUpdateMe, current_user: CurrentUser
 ) -> Any:
@@ -114,38 +117,49 @@ def update_password_me(
     return Message(message="Password updated successfully")
 
 
-@router.get("/me", response_model=UserOut)
-def read_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
+@router.get("/me", response_model=UserPublic)
+def read_user_me(current_user: CurrentUser) -> Any:
     """
     Get current user.
     """
     return current_user
 
 
-@router.post("/open", response_model=UserOut)
-def create_user_open(session: SessionDep, user_in: UserCreateOpen) -> Any:
+@router.delete("/me", response_model=Message)
+def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
+    """
+    Delete own user.
+    """
+    if current_user.is_superuser:
+        raise HTTPException(
+            status_code=403, detail="Super users are not allowed to delete themselves"
+        )
+    statement = delete(Item).where(col(Item.owner_id) == current_user.id)
+    session.exec(statement)  # type: ignore
+    session.delete(current_user)
+    session.commit()
+    return Message(message="User deleted successfully")
+
+
+@router.post("/signup", response_model=UserPublic)
+def register_user(session: SessionDep, user_in: UserRegister) -> Any:
     """
     Create new user without the need to be logged in.
     """
-    if not settings.USERS_OPEN_REGISTRATION:
-        raise HTTPException(
-            status_code=403,
-            detail="Open user registration is forbidden on this server",
-        )
     user = crud.get_user_by_email(session=session, email=user_in.email)
     if user:
         raise HTTPException(
             status_code=400,
             detail="The user with this email already exists in the system",
         )
-    user_create = UserCreate.from_orm(user_in)
+    user_create = UserCreate.model_validate(user_in)
     user = crud.create_user(session=session, user_create=user_create)
     return user
 
 
-@router.get("/{user_id}", response_model=UserOut)
+@router.get("/{user_id}", response_model=UserPublic)
 def read_user_by_id(
-    user_id: int, session: SessionDep, current_user: CurrentUser
+    user_id: uuid.UUID, session: SessionDep, current_user: CurrentUser
 ) -> Any:
     """
     Get a specific user by id.
@@ -164,12 +178,12 @@ def read_user_by_id(
 @router.patch(
     "/{user_id}",
     dependencies=[Depends(get_current_active_superuser)],
-    response_model=UserOut,
+    response_model=UserPublic,
 )
 def update_user(
     *,
     session: SessionDep,
-    user_id: int,
+    user_id: uuid.UUID,
     user_in: UserUpdate,
 ) -> Any:
     """
@@ -193,9 +207,9 @@ def update_user(
     return db_user
 
 
-@router.delete("/{user_id}")
+@router.delete("/{user_id}", dependencies=[Depends(get_current_active_superuser)])
 def delete_user(
-    session: SessionDep, current_user: CurrentUser, user_id: int
+    session: SessionDep, current_user: CurrentUser, user_id: uuid.UUID
 ) -> Message:
     """
     Delete a user.
@@ -203,15 +217,10 @@ def delete_user(
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    elif user != current_user and not current_user.is_superuser:
-        raise HTTPException(
-            status_code=403, detail="The user doesn't have enough privileges"
-        )
-    elif user == current_user and current_user.is_superuser:
+    if user == current_user:
         raise HTTPException(
             status_code=403, detail="Super users are not allowed to delete themselves"
         )
-
     statement = delete(Item).where(col(Item.owner_id) == user_id)
     session.exec(statement)  # type: ignore
     session.delete(user)

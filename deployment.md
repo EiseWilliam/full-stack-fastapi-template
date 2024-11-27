@@ -12,7 +12,7 @@ But you have to configure a couple things first. 🤓
 
 * Have a remote server ready and available.
 * Configure the DNS records of your domain to point to the IP of the server you just created.
-* Configure a wildcard subdomain for your domain, so that you can have multiple subdomains for different services, e.g. `*.fastapi-project.example.com`. This will be useful for accessing different components, like `traefik.fastapi-project.example.com`, `adminer.fastapi-project.example.com`, etc. And also for `staging`, like `staging.fastapi-project.example.com`, `staging.adminer.fastapi-project.example.com`, etc.
+* Configure a wildcard subdomain for your domain, so that you can have multiple subdomains for different services, e.g. `*.fastapi-project.example.com`. This will be useful for accessing different components, like `dashboard.fastapi-project.example.com`, `api.fastapi-project.example.com`, `traefik.fastapi-project.example.com`, `adminer.fastapi-project.example.com`, etc. And also for `staging`, like `dashboard.staging.fastapi-project.example.com`, `adminer.staging..fastapi-project.example.com`, etc.
 * Install and configure [Docker](https://docs.docker.com/engine/install/) on the remote server (Docker Engine, not Docker Desktop).
 
 ## Public Traefik
@@ -127,11 +127,12 @@ export DOMAIN=fastapi-project.example.com
 
 You can set several variables, like:
 
+* `PROJECT_NAME`: The name of the project, used in the API for the docs and emails.
+* `STACK_NAME`: The name of the stack used for Docker Compose labels and project name, this should be different for `staging`, `production`, etc. You could use the same domain replacing dots with dashes, e.g. `fastapi-project-example-com` and `staging-fastapi-project-example-com`.
 * `BACKEND_CORS_ORIGINS`: A list of allowed CORS origins separated by commas.
 * `SECRET_KEY`: The secret key for the FastAPI project, used to sign tokens.
 * `FIRST_SUPERUSER`: The email of the first superuser, this superuser will be the one that can create new users.
 * `FIRST_SUPERUSER_PASSWORD`: The password of the first superuser.
-* `USERS_OPEN_REGISTRATION`: Whether to allow open registration of new users.
 * `SMTP_HOST`: The SMTP server host to send emails, this would come from your email provider (E.g. Mailgun, Sparkpost, Sendgrid, etc).
 * `SMTP_USER`: The SMTP server user to send emails.
 * `SMTP_PASSWORD`: The SMTP server password to send emails.
@@ -142,6 +143,13 @@ You can set several variables, like:
 * `POSTGRES_USER`: The Postgres user, you can leave the default.
 * `POSTGRES_DB`: The database name to use for this application. You can leave the default of `app`.
 * `SENTRY_DSN`: The DSN for Sentry, if you are using it.
+
+## GitHub Actions Environment Variables
+
+There are some environment variables only used by GitHub Actions that you can configure:
+
+* `LATEST_CHANGES`: Used by the GitHub Action [latest-changes](https://github.com/tiangolo/latest-changes) to automatically add release notes based on the PRs merged. It's a personal access token, read the docs for details.
+* `SMOKESHOW_AUTH_KEY`: Used to handle and publish the code coverage using [Smokeshow](https://github.com/samuelcolvin/smokeshow), follow their instructions to create a (free) Smokeshow key.
 
 ### Generate secret keys
 
@@ -175,22 +183,22 @@ There are already two environments configured, `staging` and `production`. 🚀
 
 ### Install GitHub Actions Runner
 
-* On your remote server, if you are running as the `root` user, create a user for your GitHub Actions:
+* On your remote server, create a user for your GitHub Actions:
 
 ```bash
-adduser github
+sudo adduser github
 ```
 
 * Add Docker permissions to the `github` user:
 
 ```bash
-usermod -aG docker github
+sudo usermod -aG docker github
 ```
 
 * Temporarily switch to the `github` user:
 
 ```bash
-su - github
+sudo su - github
 ```
 
 * Go to the `github` user's home directory:
@@ -211,9 +219,15 @@ To make sure it runs on startup and continues running, you can install it as a s
 exit
 ```
 
-After you do it, you would be on the `root` user again. And you will be on the previous directory, belonging to the `root` user.
+After you do it, you will be on the previous user again. And you will be on the previous directory, belonging to that user.
 
-* Go to the `actions-runner` directory inside of the `github` user's home directory:
+Before being able to go the `github` user directory, you need to become the `root` user (you might already be):
+
+```bash
+sudo su
+```
+
+* As the `root` user, go to the `actions-runner` directory inside of the `github` user's home directory:
 
 ```bash
 cd /home/github/actions-runner
@@ -247,11 +261,15 @@ The current Github Actions workflows expect these secrets:
 
 * `DOMAIN_PRODUCTION`
 * `DOMAIN_STAGING`
+* `STACK_NAME_PRODUCTION`
+* `STACK_NAME_STAGING`
 * `EMAILS_FROM_EMAIL`
 * `FIRST_SUPERUSER`
 * `FIRST_SUPERUSER_PASSWORD`
 * `POSTGRES_PASSWORD`
 * `SECRET_KEY`
+* `LATEST_CHANGES`
+* `SMOKESHOW_AUTH_KEY`
 
 ## GitHub Action Deployment Workflows
 
@@ -272,20 +290,20 @@ Traefik UI: `https://traefik.fastapi-project.example.com`
 
 ### Production
 
-Frontend: `https://fastapi-project.example.com`
+Frontend: `https://dashboard.fastapi-project.example.com`
 
-Backend API docs: `https://fastapi-project.example.com/docs`
+Backend API docs: `https://api.fastapi-project.example.com/docs`
 
-Backend API base URL: `https://fastapi-project.example.com/api/`
+Backend API base URL: `https://api.fastapi-project.example.com`
 
 Adminer: `https://adminer.fastapi-project.example.com`
 
 ### Staging
 
-Frontend: `https://staging.fastapi-project.example.com`
+Frontend: `https://dashboard.staging.fastapi-project.example.com`
 
-Backend API docs: `https://staging.fastapi-project.example.com/docs`
+Backend API docs: `https://api.staging.fastapi-project.example.com/docs`
 
-Backend API base URL: `https://staging.fastapi-project.example.com/api/`
+Backend API base URL: `https://api.staging.fastapi-project.example.com`
 
-Adminer: `https://staging.adminer.fastapi-project.example.com`
+Adminer: `https://adminer.staging.fastapi-project.example.com`

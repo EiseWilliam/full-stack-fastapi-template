@@ -7,20 +7,21 @@ import {
   AlertDialogOverlay,
   Button,
 } from "@chakra-ui/react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import React from "react"
 import { useForm } from "react-hook-form"
-import { useMutation, useQueryClient } from "react-query"
 
-import { type ApiError, type UserOut, UsersService } from "../../client"
+import { type ApiError, UsersService } from "../../client"
 import useAuth from "../../hooks/useAuth"
 import useCustomToast from "../../hooks/useCustomToast"
+import { handleError } from "../../utils"
 
 interface DeleteProps {
   isOpen: boolean
   onClose: () => void
 }
 
-const DeleteConfirmation: React.FC<DeleteProps> = ({ isOpen, onClose }) => {
+const DeleteConfirmation = ({ isOpen, onClose }: DeleteProps) => {
   const queryClient = useQueryClient()
   const showToast = useCustomToast()
   const cancelRef = React.useRef<HTMLButtonElement | null>(null)
@@ -28,14 +29,10 @@ const DeleteConfirmation: React.FC<DeleteProps> = ({ isOpen, onClose }) => {
     handleSubmit,
     formState: { isSubmitting },
   } = useForm()
-  const currentUser = queryClient.getQueryData<UserOut>("currentUser")
   const { logout } = useAuth()
 
-  const deleteCurrentUser = async (id: number) => {
-    await UsersService.deleteUser({ userId: id })
-  }
-
-  const mutation = useMutation(deleteCurrentUser, {
+  const mutation = useMutation({
+    mutationFn: () => UsersService.deleteUserMe(),
     onSuccess: () => {
       showToast(
         "Success",
@@ -46,16 +43,15 @@ const DeleteConfirmation: React.FC<DeleteProps> = ({ isOpen, onClose }) => {
       onClose()
     },
     onError: (err: ApiError) => {
-      const errDetail = err.body?.detail
-      showToast("Something went wrong.", `${errDetail}`, "error")
+      handleError(err, showToast)
     },
     onSettled: () => {
-      queryClient.invalidateQueries("currentUser")
+      queryClient.invalidateQueries({ queryKey: ["currentUser"] })
     },
   })
 
   const onSubmit = async () => {
-    mutation.mutate(currentUser!.id)
+    mutation.mutate()
   }
 
   return (

@@ -12,19 +12,19 @@ import {
   ModalHeader,
   ModalOverlay,
 } from "@chakra-ui/react"
-import type React from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { type SubmitHandler, useForm } from "react-hook-form"
-import { useMutation, useQueryClient } from "react-query"
 
 import { type ApiError, type ItemCreate, ItemsService } from "../../client"
 import useCustomToast from "../../hooks/useCustomToast"
+import { handleError } from "../../utils"
 
 interface AddItemProps {
   isOpen: boolean
   onClose: () => void
 }
 
-const AddItem: React.FC<AddItemProps> = ({ isOpen, onClose }) => {
+const AddItem = ({ isOpen, onClose }: AddItemProps) => {
   const queryClient = useQueryClient()
   const showToast = useCustomToast()
   const {
@@ -41,22 +41,19 @@ const AddItem: React.FC<AddItemProps> = ({ isOpen, onClose }) => {
     },
   })
 
-  const addItem = async (data: ItemCreate) => {
-    await ItemsService.createItem({ requestBody: data })
-  }
-
-  const mutation = useMutation(addItem, {
+  const mutation = useMutation({
+    mutationFn: (data: ItemCreate) =>
+      ItemsService.createItem({ requestBody: data }),
     onSuccess: () => {
       showToast("Success!", "Item created successfully.", "success")
       reset()
       onClose()
     },
     onError: (err: ApiError) => {
-      const errDetail = err.body?.detail
-      showToast("Something went wrong.", `${errDetail}`, "error")
+      handleError(err, showToast)
     },
     onSettled: () => {
-      queryClient.invalidateQueries("items")
+      queryClient.invalidateQueries({ queryKey: ["items"] })
     },
   })
 
